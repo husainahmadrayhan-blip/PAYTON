@@ -4,9 +4,10 @@ from urllib.parse import urlparse, parse_qs
 import os, json, threading, webbrowser, base64, zipfile, io, re, shutil, time
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)
-# Set PROJECTS_DIR=/data/projects and mount persistent storage at /data
-# if saved projects must survive container restarts/redeploys.
-PROJECTS_DIR = Path(os.environ.get('PROJECTS_DIR', str(ROOT / 'projects'))).resolve()
+# Hostless containers may have a read-only application directory.
+# Use /tmp as a writable default; configure PROJECTS_DIR to a mounted
+# persistent volume (for example /data/projects) to retain saved projects.
+PROJECTS_DIR = Path(os.environ.get('PROJECTS_DIR', '/tmp/projects')).resolve()
 PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
 
 def clean_project_name(raw):
