@@ -4,11 +4,8 @@ from urllib.parse import urlparse, parse_qs
 import os, json, threading, webbrowser, base64, zipfile, io, re, shutil, time
 ROOT = Path(__file__).resolve().parent
 os.chdir(ROOT)
-# Hostless containers may have a read-only application directory.
-# Use /tmp as a writable default; configure PROJECTS_DIR to a mounted
-# persistent volume (for example /data/projects) to retain saved projects.
-PROJECTS_DIR = Path(os.environ.get('PROJECTS_DIR', '/tmp/projects')).resolve()
-PROJECTS_DIR.mkdir(parents=True, exist_ok=True)
+PROJECTS_DIR = ROOT / "projects"
+PROJECTS_DIR.mkdir(exist_ok=True)
 
 def clean_project_name(raw):
     name = re.sub(r'[<>:"/\\\\|?*\x00-\x1f]', '_', str(raw or '').strip())
@@ -33,8 +30,6 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         # Browsers request this automatically; the editor has no favicon asset.
-        if parsed.path == '/api/health':
-            return json_reply(self, 200, {'ok': True, 'service': 'html-pdf-editor'})
         if parsed.path == '/favicon.ico':
             self.send_response(204); self.send_header('Content-Length', '0'); self.end_headers(); return
         if parsed.path == '/api/projects':
@@ -162,11 +157,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header('Content-Type','application/json; charset=utf-8')
         self.send_header('Content-Length',str(len(body)))
         self.end_headers();self.wfile.write(body)
-# Hostless/cloud deployment: listen on the platform-provided port and all interfaces.
-# Keep a single-threaded server to preserve the existing Playwright thread-affinity behavior.
-PORT = int(os.environ.get('PORT', '8080'))
-HOST = os.environ.get('HOST', '0.0.0.0')
-s=HTTPServer((HOST, PORT),Handler)
-print(f'Editor listening on {HOST}:{PORT}',flush=True)
-print('Projects folder:', str(PROJECTS_DIR), flush=True)
+# Playwright's synchronous API is thread-affine. Use a single-threaded local HTTP server
+# so browser startup, status checks, and PDF uploads all run on the same thread.
+s=HTTPServer(('127.0.0.1',0),Handler)
+url=f'http://127.0.0.1:{s.server_port}/'
+print('Editor:',url,flush=True)
+print('Permanent projects folder:', str(PROJECTS_DIR), flush=True)
+threading.Timer(1,lambda:webbrowser.open(url)).start()
 s.serve_forever()
